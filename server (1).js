@@ -55,7 +55,7 @@ async function searchMusic(query) {
         if (audio) {
           results.push({
             title: doc.title || query,
-            artist: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
+            creator: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
             source: 'Internet Archive',
             license: 'Public Domain / CC',
             downloadUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(audio.name)}`,
@@ -77,7 +77,7 @@ async function searchMusic(query) {
       if (dlUrl && dlUrl.startsWith('http')) {
         results.push({
           title: t.track_title || query,
-          artist: t.artist_name || 'Unknown',
+          creator: t.artist_name || 'Unknown',
           source: 'Free Music Archive',
           license: t.license_title || 'Creative Commons',
           downloadUrl: dlUrl,
@@ -109,7 +109,7 @@ async function searchBook(query) {
       if (dlUrl) {
         results.push({
           title: b.title || query,
-          artist: b.authors?.map(a => a.name).join(', ') || 'Unknown Author',
+          creator: b.authors?.map(a => a.name).join(', ') || 'Unknown Author',
           source: 'Project Gutenberg',
           license: 'Public Domain',
           downloadUrl: dlUrl,
@@ -130,7 +130,7 @@ async function searchBook(query) {
         const id = doc.ia[0];
         results.push({
           title: doc.title || query,
-          artist: doc.author_name?.join(', ') || 'Unknown Author',
+          creator: doc.author_name?.join(', ') || 'Unknown Author',
           source: 'Open Library',
           license: 'Public Domain / Open Access',
           downloadUrl: `https://archive.org/download/${id}/${id}.pdf`,
@@ -163,7 +163,7 @@ async function searchMovie(query) {
         if (vid) {
           results.push({
             title: doc.title || query,
-            artist: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
+            creator: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
             source: 'Internet Archive',
             license: 'Public Domain',
             downloadUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(vid.name)}`,
@@ -174,6 +174,156 @@ async function searchMovie(query) {
           });
         }
       } catch (_) {}
+    }
+  } catch (_) {}
+
+  return results;
+}
+
+// ── ANIME ─────────────────────────────────────────────────────────────────────
+// Searches Internet Archive for public domain / CC-licensed anime
+async function searchAnime(query) {
+  const results = [];
+
+  try {
+    const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query + ' anime')}&fl[]=identifier,title,creator,year&rows=8&and[]=mediatype%3A%22movies%22&output=json`;
+    const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
+    const docs = res.data?.response?.docs || [];
+    for (const doc of docs.slice(0, 5)) {
+      try {
+        const fileRes = await axios.get(`https://archive.org/metadata/${doc.identifier}`, { headers: HEADERS, timeout: 8000 });
+        const files = fileRes.data?.files || [];
+        const vid = files.find(f => f.name?.toLowerCase().endsWith('.mp4'))
+          || files.find(f => f.name?.toLowerCase().endsWith('.ogv'))
+          || files.find(f => f.name?.toLowerCase().endsWith('.avi'));
+        if (vid) {
+          results.push({
+            title: doc.title || query,
+            creator: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
+            source: 'Internet Archive',
+            license: 'Public Domain / CC',
+            downloadUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(vid.name)}`,
+            fileType: vid.name.split('.').pop().toLowerCase(),
+            size: formatSize(vid.size),
+            year: doc.year || null,
+            isPageLink: false,
+          });
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // Also search for anime as audio (soundtracks)
+  if (results.length < 3) {
+    try {
+      const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query + ' anime soundtrack')}&fl[]=identifier,title,creator&rows=5&and[]=mediatype%3A%22audio%22&output=json`;
+      const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
+      const docs = res.data?.response?.docs || [];
+      for (const doc of docs.slice(0, 3)) {
+        try {
+          const fileRes = await axios.get(`https://archive.org/metadata/${doc.identifier}`, { headers: HEADERS, timeout: 8000 });
+          const files = fileRes.data?.files || [];
+          const audio = files.find(f => f.name?.toLowerCase().endsWith('.mp3'))
+            || files.find(f => f.name?.toLowerCase().endsWith('.ogg'));
+          if (audio) {
+            results.push({
+              title: doc.title || query,
+              creator: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
+              source: 'Internet Archive',
+              license: 'Public Domain / CC',
+              downloadUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(audio.name)}`,
+              fileType: audio.name.split('.').pop().toLowerCase(),
+              size: formatSize(audio.size),
+              isPageLink: false,
+            });
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  return results;
+}
+
+// ── AUDIOBOOKS ────────────────────────────────────────────────────────────────
+async function searchAudiobook(query) {
+  const results = [];
+
+  try {
+    const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,creator&rows=6&and[]=mediatype%3A%22audio%22&and[]=subject%3A%22audiobook%22&output=json`;
+    const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
+    const docs = res.data?.response?.docs || [];
+    for (const doc of docs.slice(0, 5)) {
+      try {
+        const fileRes = await axios.get(`https://archive.org/metadata/${doc.identifier}`, { headers: HEADERS, timeout: 8000 });
+        const files = fileRes.data?.files || [];
+        const audio = files.find(f => f.name?.toLowerCase().endsWith('.mp3'))
+          || files.find(f => f.name?.toLowerCase().endsWith('.ogg'));
+        if (audio) {
+          results.push({
+            title: doc.title || query,
+            creator: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
+            source: 'Internet Archive',
+            license: 'Public Domain / CC',
+            downloadUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(audio.name)}`,
+            fileType: audio.name.split('.').pop().toLowerCase(),
+            size: formatSize(audio.size),
+            isPageLink: false,
+          });
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // LibriVox via Open Library search
+  try {
+    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&fields=key,title,author_name,ia&limit=5`;
+    const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
+    const docs = res.data?.docs || [];
+    for (const doc of docs.slice(0, 3)) {
+      if (doc.ia && doc.ia.length > 0) {
+        const id = doc.ia[0];
+        results.push({
+          title: doc.title || query,
+          creator: doc.author_name?.join(', ') || 'Unknown Author',
+          source: 'LibriVox / Open Library',
+          license: 'Public Domain',
+          downloadUrl: `https://archive.org/download/${id}/${id}_64kb.mp3`,
+          fileType: 'mp3',
+          size: null,
+          isPageLink: false,
+        });
+      }
+    }
+  } catch (_) {}
+
+  return results;
+}
+
+// ── IMAGES ────────────────────────────────────────────────────────────────────
+async function searchImages(query) {
+  const results = [];
+
+  try {
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrsearch=${encodeURIComponent(query)}&gsrlimit=8&prop=imageinfo&iiprop=url|size|mediatype|extmetadata&format=json&origin=*`;
+    const res = await axios.get(url, { headers: HEADERS, timeout: 12000 });
+    const pages = res.data?.query?.pages || {};
+    for (const page of Object.values(pages).slice(0, 6)) {
+      const info = page.imageinfo?.[0];
+      if (info && info.url) {
+        const license = info.extmetadata?.LicenseShortName?.value || 'CC / Public Domain';
+        const author = info.extmetadata?.Artist?.value?.replace(/<[^>]+>/g, '') || 'Unknown';
+        results.push({
+          title: page.title?.replace('File:', '') || query,
+          creator: author,
+          source: 'Wikimedia Commons',
+          license,
+          downloadUrl: info.url,
+          fileType: info.url.split('.').pop().split('?')[0].toLowerCase().slice(0, 6),
+          size: info.size ? formatSize(info.size) : null,
+          isPageLink: false,
+        });
+      }
     }
   } catch (_) {}
 
@@ -192,7 +342,7 @@ async function searchGame(query) {
       if (title && href) {
         results.push({
           title,
-          artist: $(el).find('.game_author a, .by').first().text().trim() || 'Indie Dev',
+          creator: $(el).find('.game_author a, .by').first().text().trim() || 'Indie Dev',
           source: 'itch.io',
           license: 'Freeware',
           downloadUrl: href.startsWith('http') ? href : `https://itch.io${href}`,
@@ -211,7 +361,7 @@ async function searchGame(query) {
     for (const r of repos.slice(0, 3)) {
       results.push({
         title: r.name || query,
-        artist: r.owner?.login || 'GitHub',
+        creator: r.owner?.login || 'GitHub',
         source: 'GitHub',
         license: r.license?.name || 'Open Source',
         downloadUrl: `https://github.com/${r.full_name}/archive/refs/heads/${r.default_branch || 'main'}.zip`,
@@ -236,7 +386,7 @@ async function searchSoftware(query) {
     for (const r of repos.slice(0, 5)) {
       results.push({
         title: r.full_name,
-        artist: r.owner?.login || 'GitHub',
+        creator: r.owner?.login || 'GitHub',
         source: 'GitHub',
         license: r.license?.name || 'Open Source',
         downloadUrl: `https://github.com/${r.full_name}/archive/refs/heads/${r.default_branch || 'main'}.zip`,
@@ -268,7 +418,7 @@ async function searchPodcast(query) {
         if (audio) {
           results.push({
             title: doc.title || query,
-            artist: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
+            creator: Array.isArray(doc.creator) ? doc.creator[0] : (doc.creator || 'Unknown'),
             source: 'Internet Archive',
             license: 'Public / CC',
             downloadUrl: `https://archive.org/download/${doc.identifier}/${encodeURIComponent(audio.name)}`,
@@ -287,7 +437,7 @@ async function searchPodcast(query) {
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
-  res.json({ name: 'FreeFind API', status: 'running', version: '2.0.0' });
+  res.json({ name: 'FreeFind API', status: 'running', version: '2.1.0' });
 });
 
 app.get('/api/health', (req, res) => {
@@ -295,31 +445,59 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/search', async (req, res) => {
-  const { query, category } = req.query;
-  if (!query || !category) {
-    return res.status(400).json({ error: 'Both query and category are required.' });
+  // FIX 1: Accept both 'q' (sent by frontend) and 'query' (legacy)
+  const rawQuery = req.query.q || req.query.query;
+  const { category } = req.query;
+
+  if (!rawQuery || !category) {
+    return res.status(400).json({ error: 'Both q and category are required.' });
   }
 
-  const q = String(query).trim().slice(0, 200);
-  const cat = String(category).trim().toLowerCase();
-  const VALID = ['music', 'book', 'movie', 'game', 'software', 'podcast'];
-  if (!VALID.includes(cat)) {
-    return res.status(400).json({ error: `Invalid category. Use one of: ${VALID.join(', ')}` });
+  const q = String(rawQuery).trim().slice(0, 200);
+  const catRaw = String(category).trim().toLowerCase();
+
+  // FIX 2: Map all frontend category names to handler names
+  const CATEGORY_MAP = {
+    music:      'music',
+    books:      'book',
+    book:       'book',
+    movies:     'movie',
+    movie:      'movie',
+    anime:      'anime',
+    audiobooks: 'audiobook',
+    audiobook:  'audiobook',
+    games:      'game',
+    game:       'game',
+    software:   'software',
+    podcasts:   'podcast',
+    podcast:    'podcast',
+    images:     'images',
+    image:      'images',
+    comics:     'book',   // comics → search books/archive
+    education:  'book',   // education → books
+  };
+
+  const cat = CATEGORY_MAP[catRaw];
+  if (!cat) {
+    return res.status(400).json({ error: `Unknown category "${catRaw}". Supported: ${Object.keys(CATEGORY_MAP).join(', ')}` });
   }
 
   try {
     let results = [];
-    if (cat === 'music')    results = await searchMusic(q);
-    if (cat === 'book')     results = await searchBook(q);
-    if (cat === 'movie')    results = await searchMovie(q);
-    if (cat === 'game')     results = await searchGame(q);
-    if (cat === 'software') results = await searchSoftware(q);
-    if (cat === 'podcast')  results = await searchPodcast(q);
+    if (cat === 'music')     results = await searchMusic(q);
+    if (cat === 'book')      results = await searchBook(q);
+    if (cat === 'movie')     results = await searchMovie(q);
+    if (cat === 'anime')     results = await searchAnime(q);
+    if (cat === 'audiobook') results = await searchAudiobook(q);
+    if (cat === 'game')      results = await searchGame(q);
+    if (cat === 'software')  results = await searchSoftware(q);
+    if (cat === 'podcast')   results = await searchPodcast(q);
+    if (cat === 'images')    results = await searchImages(q);
 
     // Deduplicate by URL
     const seen = new Set();
     const unique = results.filter(r => {
-      if (seen.has(r.downloadUrl)) return false;
+      if (!r.downloadUrl || seen.has(r.downloadUrl)) return false;
       seen.add(r.downloadUrl);
       return true;
     });
@@ -340,6 +518,7 @@ app.get('/api/download', async (req, res) => {
     'gutendex.com', 'openlibrary.org', 'standardebooks.org',
     'github.com', 'raw.githubusercontent.com', 'objects.githubusercontent.com',
     'sourceforge.net', 'ccmixter.org', 'jamendo.com',
+    'upload.wikimedia.org', 'commons.wikimedia.org',
   ];
 
   let parsedHost;
@@ -394,5 +573,14 @@ app.use((err, req, res, next) => {
   console.error('Unhandled:', err.message);
   res.status(500).json({ error: 'Internal server error.' });
 });
+
+// FIX 3: Keep Render free tier awake — ping self every 10 minutes
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://freefind-backend.onrender.com';
+if (process.env.NODE_ENV === 'production') {
+  setInterval(() => {
+    axios.get(`${SELF_URL}/api/health`, { timeout: 10000 }).catch(() => {});
+  }, 10 * 60 * 1000);
+  console.log('✅ Keep-alive ping enabled');
+}
 
 app.listen(PORT, () => console.log(`✅ FreeFind backend running on port ${PORT}`));
