@@ -34,10 +34,36 @@ function fmt(bytes) {
   return (b/1073741824).toFixed(2) + ' GB';
 }
 
-// ── CORE IA SEARCH — no per-item fetch, always returns results ────────────────
+// ── CORE IA SEARCH ───────────────────────────────────────────────────────────
+// Uses IA's scrape API (more reliable than advancedsearch after IA's 2024 changes)
+// Query format: "term AND mediatype:audio" — simpler, works reliably
 async function ia(query, mediatype, ext, rows = 12) {
+  // Try scrape API first (most reliable)
   try {
-    const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,creator,year,item_size&rows=${rows}&and[]=mediatype%3A%22${mediatype}%22&output=json`;
+    const q = `(${query}) AND mediatype:${mediatype}`;
+    const url = `https://archive.org/services/search/v1/scrape?q=${encodeURIComponent(q)}&fields=identifier,title,creator,year,item_size&count=${rows}&output=json`;
+    const res = await axios.get(url, { headers: HEADERS, timeout: 14000 });
+    const items = res.data?.items || [];
+    if (items.length > 0) {
+      return items.slice(0, rows).map(d => ({
+        title: Array.isArray(d.title) ? d.title[0] : (d.title || query),
+        creator: Array.isArray(d.creator) ? d.creator[0] : (d.creator || ''),
+        source: 'Internet Archive',
+        license: 'Public Domain / CC',
+        downloadUrl: `https://archive.org/download/${d.identifier}/${d.identifier}.${ext}`,
+        pageUrl: `https://archive.org/details/${d.identifier}`,
+        fileType: ext,
+        size: fmt(d.item_size),
+        year: d.year || null,
+        isPageLink: false,
+      }));
+    }
+  } catch(_) {}
+
+  // Fallback: advancedsearch with simpler query (no and[] filter)
+  try {
+    const q = `${query} mediatype:${mediatype}`;
+    const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier,title,creator,year,item_size&rows=${rows}&output=json`;
     const res = await axios.get(url, { headers: HEADERS, timeout: 14000 });
     const docs = res.data?.response?.docs || [];
     return docs.slice(0, rows).map(d => ({
@@ -242,7 +268,7 @@ async function searchComics(query) {
 }
 
 // ── ROUTES ────────────────────────────────────────────────────────────────────
-app.get('/', (req,res) => res.json({ name:'FreeFind API', version:'7.0.0', status:'running' }));
+app.get('/', (req,res) => res.json({ name:'FreeFind API', version:'7.1.0', status:'running' }));
 app.get('/api/health', (req,res) => res.json({ status:'ok', timestamp:new Date().toISOString() }));
 
 app.get('/api/search', async (req,res) => {
@@ -323,4 +349,4 @@ const SELF = process.env.RENDER_EXTERNAL_URL||'https://freefind-backend.onrender
 if (process.env.NODE_ENV==='production') {
   setInterval(()=>axios.get(`${SELF}/api/health`,{timeout:8000}).catch(()=>{}), 9*60*1000);
 }
-app.listen(PORT, ()=>console.log(`FreeFind v7.0 running on port ${PORT}`));
+app.listen(PORT, ()=>console.log(`FreeFind v7.1 running on port ${PORT}`));
